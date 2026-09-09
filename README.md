@@ -1,4 +1,4 @@
-Shopify CRO Auditor
+**Shopify CRO Auditor**
 Overview
 
 Shopify CRO Auditor is a lightweight, browser-based tool for reviewing live Shopify product pages for potential conversion-rate optimisation (CRO) issues.
@@ -7,7 +7,7 @@ The tool runs directly on the storefront through a bookmarklet and requires no b
 
 It is designed to quickly identify potential friction within the product-purchase journey and provide evidence, recommendations and suggested validation methods.
 
-What It Checks
+**What It Checks**
 
 The auditor performs a range of automated and manual-review checks covering areas including:
 
@@ -27,7 +27,7 @@ Product-specific information for categories such as apparel, drinkware, homeware
 
 The auditor adapts some checks based on the type of product it detects, rather than applying every requirement to every PDP.
 
-Installation
+**Installation**
 Open shopify-cro-auditor-v6.html in Chrome.
 Make sure the bookmarks bar is visible:
 Mac: ⌘ + Shift + B
@@ -50,7 +50,7 @@ The results also include an overall score, grade, product profile, viewport info
 
 If product options are changed after an audit, use Rescan to analyse the new product state.
 
-Scoring
+**Scoring**
 
 Applicable checks contribute towards a weighted overall score. Higher-priority checks have a greater impact on the result, while checks that are not relevant to the detected product are excluded.
 
@@ -64,7 +64,7 @@ Below 50	High friction
 
 The auditor also calculates individual category scores to help identify the weakest areas of the PDP.
 
-Reports
+**Reports**
 
 Audit results can be exported using:
 
@@ -72,7 +72,7 @@ Download report — generates a standalone HTML audit report containing findings
 
 Export data (JSON) — exports the audit data in a structured format for further analysis or storage.
 
-Important
+**Important**
 
 The Shopify CRO Auditor is intended as a diagnostic and hypothesis-generation tool, not a replacement for Shopify Analytics, customer research or A/B testing.
 
