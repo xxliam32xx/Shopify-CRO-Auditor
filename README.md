@@ -34,7 +34,8 @@ Mac: ⌘ + Shift + B
 Windows: Ctrl + Shift + B
 Drag the Run CRO Audit button onto the bookmarks bar.
 If an older version is installed, remove the existing bookmark before installing the new version.
-Usage
+
+**Usage**
 
 Open a live Shopify product page and click Run CRO Audit from the bookmarks bar.
 
