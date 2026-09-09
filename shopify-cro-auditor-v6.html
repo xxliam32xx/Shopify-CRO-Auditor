@@ -227,11 +227,11 @@
       const deliveryTerms = ['delivery', 'dispatch', 'ships in', 'shipping', 'estimated arrival', 'arrives'];
       const specificDelivery = copy => /\bfree\s+(?:standard\s+)?(?:shipping|delivery)\b|[£$€]\s*\d|\b\d+\s*(?:[-–]\s*\d+\s*)?(?:(?:business|working)\s+)?(?:days?|weeks?)\b|\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}\b/i.test(copy);
       const deliveryCandidates = signals(deliveryTerms);
-      const deliverySignal = deliveryCandidates.find(el => specificDelivery(text(el))) || deliveryCandidates[0] || null;
-      const returnSignal = signal(['return policy', 'returns', 'free returns', 'money back', 'refund']);
-      const sizeSignal = signal(['size guide', 'size chart', 'sizing']);
-      const stockSignal = signal(['in stock', 'low stock', 'only ', 'sold out', 'unavailable', 'backorder', 'pre-order', 'preorder']);
-      const paymentSignal = signal(['shop pay', 'apple pay', 'google pay', 'paypal', 'klarna', 'afterpay', 'secure checkout']);
+      let deliverySignal = deliveryCandidates.find(el => specificDelivery(text(el))) || deliveryCandidates[0] || null;
+      let returnSignal = signal(['return policy', 'returns', 'free returns', 'money back', 'refund']);
+      let sizeSignal = signal(['size guide', 'size chart', 'sizing']);
+      let stockSignal = signal(['in stock', 'low stock', 'only ', 'sold out', 'unavailable', 'backorder', 'pre-order', 'preorder']);
+      let paymentSignal = signal(['shop pay', 'apple pay', 'google pay', 'paypal', 'klarna', 'afterpay', 'secure checkout']);
       const paymentGraphic = $('[class*="payment" i] svg, [class*="payment" i] img', productRoot);
       const accordion = $$('details, [class*="accordion" i], [aria-expanded]', productRoot).filter(visible).length > 0;
       const descriptionCandidates = [];
@@ -244,13 +244,16 @@
       };
       $$('[itemprop="description"], .product__description, [class*="product-description" i], [class*="product__description" i], [id*="description" i], [class*="description" i], [data-tab-content*="description" i], [aria-label*="description" i]', main)
         .forEach(el => addDescriptionCandidate(el, 'description-labelled section'));
-      const descriptionLabels = $$('h2, h3, h4, button, summary, [role="tab"], a', main)
+      // Some Shopify tab sections use a plain UL/LI label (for example,
+      // <ul class="nav-tabs">DESCRIPTION</ul>) instead of a semantic tab.
+      const descriptionLabels = $$('h2, h3, h4, button, summary, [role="tab"], a, li, ul, [class*="tab" i]', main)
         .filter(el => visible(el) && /^(description|product description|product details|details)$/i.test(text(el).replace(/[:\s]+$/g, '').trim()));
       descriptionLabels.forEach(label => {
         const controlledId = label.getAttribute('aria-controls') || (label.getAttribute('href') || '').replace(/^#/, '');
         if (controlledId) addDescriptionCandidate(document.getElementById(controlledId), 'panel controlled by the Description tab');
         addDescriptionCandidate(label.nextElementSibling, 'content following the Description heading');
         addDescriptionCandidate(label.parentElement?.nextElementSibling, 'content following the Description tab wrapper');
+        addDescriptionCandidate(label.parentElement?.parentElement?.nextElementSibling, 'content following the Description tab section');
         addDescriptionCandidate(label.closest('details, section, article, [role="tabpanel"], [class*="tab-content" i], [class*="tab_content" i]'), 'Description heading container');
         addDescriptionCandidate(label.parentElement, 'Description heading parent');
       });
@@ -265,10 +268,27 @@
         return bLabelled - aLabelled || b.words - a.words || a.length - b.length;
       });
       const descriptionMatch = descriptionCandidates[0] || null;
-      const description = descriptionMatch?.el || null;
+      // Last-resort theme fallback: content immediately after an exact
+      // DESCRIPTION label is product detail copy even when its container
+      // has no semantic class or its shape defeats the normal candidates.
+      const tabDescription = $$('h2, h3, h4, button, summary, [role="tab"], a, li, ul, [class*="tab" i]', main)
+        .find(el => visible(el) && /^(description|product description|product details|details)$/i.test(text(el).replace(/[:\s]+$/g, '').trim()));
+      const description = descriptionMatch?.el || tabDescription?.nextElementSibling || tabDescription?.parentElement?.nextElementSibling || tabDescription?.parentElement?.parentElement?.nextElementSibling || null;
       const descText = text(description);
       const bulletCount = description ? $$('li', description).filter(visible).length : 0;
       const descriptionEvidence = descriptionMatch ? `${descriptionMatch.source} · ${descriptionMatch.words} words · “${descText.slice(0,180)}${descText.length > 180 ? '…' : ''}”` : 'No substantial visible description section or paragraph was detected';
+      // Themes may render delivery and preorder messages in a separate product
+      // details tab rather than beside the purchase form. Search both areas,
+      // but never the related-products or footer sections excluded by signals().
+      const productDetailSignal = (terms, prefer = null) => {
+        const found = [...new Set([productRoot, description].filter(Boolean).flatMap(root => signals(terms, root)))];
+        return (prefer ? found.find(prefer) : null) || found[0] || null;
+      };
+      deliverySignal = productDetailSignal(deliveryTerms, el => specificDelivery(text(el)));
+      returnSignal = productDetailSignal(['return policy', 'returns', 'free returns', 'money back', 'refund']);
+      sizeSignal = productDetailSignal(['size guide', 'size chart', 'sizing']);
+      stockSignal = productDetailSignal(['in stock', 'low stock', 'only ', 'sold out', 'unavailable', 'backorder', 'pre-order', 'preorder']);
+      paymentSignal = productDetailSignal(['shop pay', 'apple pay', 'google pay', 'paypal', 'klarna', 'afterpay', 'secure checkout']);
       const metaDescription = $('meta[name="description"]')?.content?.trim() || '';
       const viewport = $('meta[name="viewport"]')?.content || '';
       const brokenImages = galleryImages.filter(img => img.complete && !!img.currentSrc && img.naturalWidth === 0).length;
@@ -353,13 +373,16 @@
       const careSignal = contentSignal(['machine wash', 'hand wash', 'care instructions', 'wash at', 'do not tumble', 'dry clean']);
       const licenceSignal = contentSignal(['officially licensed', 'official licensed', 'official merchandise', 'licensed merchandise']);
       const valueLead = description ? text($('p, h2, h3', description) || description).slice(0, 220) : '';
-      const dispatchSignal = signal(['dispatch', 'ships in', 'ready to ship']);
-      const deliveryCostSignal = signal(['free delivery', 'free shipping', 'delivery from', 'shipping from', 'delivery £', 'shipping £']);
-      const preorderSignal = signal(['pre-order', 'preorder', 'pre order']);
+      const dispatchSignal = productDetailSignal(['dispatch', 'ships in', 'ready to ship', 'expected shipping time', 'shipping time']);
+      const deliveryCostSignal = productDetailSignal(['free delivery', 'free shipping', 'delivery from', 'shipping from', 'delivery £', 'shipping £']);
+      // A generic “Preorder” CTA is useful context but is not the timing. Prefer
+      // a nearby preorder message that also gives a shipment/release date/window.
+      const preorderTimingPattern = /(release|dispatch|ship|available|expected|estimated|\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4}|\d+\s*(day|week|month))/i;
+      const preorderSignal = productDetailSignal(['pre-order', 'preorder', 'pre order'], el => preorderTimingPattern.test(text(el)));
       const preorderContext = /pre-?order/i.test(scopedText);
-      const preorderSpecific = !!preorderSignal && /(release|dispatch|ship|available|expected|estimated|\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|\d+\s*(day|week|month))/i.test(text(preorderSignal));
+      const preorderSpecific = !!preorderSignal && preorderTimingPattern.test(text(preorderSignal));
       const podContext = /\b(print on demand|made to order|produced to order|production time|pod)\b/i.test(scopedText);
-      const podSpecific = !!signal(['production time', 'made within', 'printed within', 'made to order in']);
+      const podSpecific = !!productDetailSignal(['production time', 'made within', 'printed within', 'made to order in']);
       const customerPhotoEl = $('[class*="review" i] img, [class*="ugc" i] img, [data-review] img', main);
       const verifiedSignal = signal(['verified buyer', 'verified purchase'], main);
       const reviewBreakdown = !!$('[class*="histogram" i], [class*="rating-breakdown" i], [aria-label*="5 star" i]', main);
@@ -693,6 +716,23 @@
       const body = $('.body', shadow);
       body.addEventListener('wheel', event => event.stopPropagation(), {passive:true});
       body.addEventListener('touchmove', event => event.stopPropagation(), {passive:true});
+      const findingTitle = (item, isPass, isManual) => {
+        if (isPass || isManual) return `${item.confidence === 'likely' ? 'Likely: ' : ''}${item.title}`;
+        const negative = item.title
+          .replace(/ is specific$/i, ' is not specific')
+          .replace(/ is stated$/i, ' is not stated')
+          .replace(/ is clear$/i, ' is unclear')
+          .replace(/ is visible$/i, ' is not visible')
+          .replace(/ is available$/i, ' is not available')
+          .replace(/ is present$/i, ' is missing')
+          .replace(/ are present$/i, ' are missing')
+          .replace(/ agrees with /i, ' does not agree with ')
+          .replace(/ matches /i, ' does not match ')
+          .replace(/ exists$/i, ' is missing')
+          .replace(/ appears /i, ' does not appear ')
+          .replace(/ starts above /i, ' does not start above ');
+        return `${item.confidence === 'likely' ? 'Likely issue: ' : ''}${negative === item.title ? `Needs attention: ${item.title}` : negative}`;
+      };
       const render = (items, isPass, isManual = false) => {
         body.innerHTML = '';
         if (!items.length) { body.innerHTML = '<div class="empty">Nothing to show here.</div>'; return; }
@@ -709,7 +749,7 @@
             const el = document.createElement('article');
             el.className = `item ${isManual ? 'manual' : isPass ? 'pass' : 'fail'}`;
             const priority = item.weight === 3 ? 'High' : item.weight === 2 ? 'Medium' : 'Low';
-            el.innerHTML = `<div class="row"><span class="badge">${isManual ? '?' : isPass ? '✓' : '!'}</span><div class="title">${item.confidence === 'likely' ? 'Likely: ' : ''}${esc(item.title)}</div>${isPass ? '' : `<span class="sev">${isManual ? 'Manual' : priority}</span>`}</div><p class="evidence"><b>${isManual ? 'Why this needs a person' : 'What the audit found'}</b>${esc(item.evidence || 'No supporting page signal was detected.')}</p><p class="why"><b>Why it matters</b>${esc(item.why)}</p>${isPass ? '' : `<p class="fix"><b>${isManual ? 'What good looks like' : 'Recommended change'}</b>${esc(item.fix)}</p>${item.test ? `<p class="test"><b>${isManual ? 'How to review it' : 'How to validate it'}</b>${esc(item.test)}</p>` : ''}`}`;
+            el.innerHTML = `<div class="row"><span class="badge">${isManual ? '?' : isPass ? '✓' : '!'}</span><div class="title">${esc(findingTitle(item, isPass, isManual))}</div>${isPass ? '' : `<span class="sev">${isManual ? 'Manual' : priority}</span>`}</div><p class="evidence"><b>${isManual ? 'Why this needs a person' : 'What the audit found'}</b>${esc(item.evidence || 'No supporting page signal was detected.')}</p><p class="why"><b>Why it matters</b>${esc(item.why)}</p>${isPass ? '' : `<p class="fix"><b>${isManual ? 'What good looks like' : 'Recommended change'}</b>${esc(item.fix)}</p>${item.test ? `<p class="test"><b>${isManual ? 'How to review it' : 'How to validate it'}</b>${esc(item.test)}</p>` : ''}`}`;
             section.appendChild(el);
           });
           body.appendChild(section);
@@ -724,7 +764,7 @@
       $('.close', shadow).addEventListener('click', close);
       $('[data-action="rescan"]', shadow).addEventListener('click', () => { close(); setTimeout(runShopifyCroAudit, 50); });
       $('[data-action="download"]', shadow).addEventListener('click', () => {
-        const rows = [...applicable, ...manualItems].map(i => `<tr><td><span class="dot ${i.manual ? 'review' : i.pass ? 'yes' : 'no'}">${i.manual ? 'REVIEW' : i.pass ? 'PASS' : 'FIX'}</span></td><td><b>${i.confidence === 'likely' ? 'Likely: ' : ''}${esc(i.title)}</b><br><small>${esc(i.category)}${i.manual ? ' · Manual' : ` · ${i.weight === 3 ? 'High' : i.weight === 2 ? 'Medium' : 'Low'} priority`}</small></td><td><b>${i.manual ? 'Reason:' : 'Found:'}</b> ${esc(i.evidence || '—')}<br><br><b>Why:</b> ${esc(i.why)}</td><td>${i.pass ? 'No action required.' : `<b>${i.manual ? 'Good:' : 'Change:'}</b> ${esc(i.fix)}${i.test ? `<br><br><b>${i.manual ? 'Review:' : 'Validate:'}</b> ${esc(i.test)}` : ''}`}</td></tr>`).join('');
+        const rows = [...applicable, ...manualItems].map(i => `<tr><td><span class="dot ${i.manual ? 'review' : i.pass ? 'yes' : 'no'}">${i.manual ? 'REVIEW' : i.pass ? 'PASS' : 'FIX'}</span></td><td><b>${esc(findingTitle(i, i.pass, i.manual))}</b><br><small>${esc(i.category)}${i.manual ? ' · Manual' : ` · ${i.weight === 3 ? 'High' : i.weight === 2 ? 'Medium' : 'Low'} priority`}</small></td><td><b>${i.manual ? 'Reason:' : 'Found:'}</b> ${esc(i.evidence || '—')}<br><br><b>Why:</b> ${esc(i.why)}</td><td>${i.pass ? 'No action required.' : `<b>${i.manual ? 'Good:' : 'Change:'}</b> ${esc(i.fix)}${i.test ? `<br><br><b>${i.manual ? 'Review:' : 'Validate:'}</b> ${esc(i.test)}` : ''}`}</td></tr>`).join('');
         const categorySummary = categoryScores.map(c => `${esc(c.category)} ${c.score}%`).join(' · ');
         const report = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>CRO Audit — ${esc(text(h1) || location.hostname)}</title><style>body{margin:0;background:#f5f7f6;color:#16221c;font:14px/1.5 system-ui,-apple-system,sans-serif}.wrap{max-width:1050px;margin:auto;padding:42px 24px}header{display:flex;justify-content:space-between;gap:30px;align-items:flex-end;margin-bottom:20px}h1{font-size:34px;line-height:1.05;margin:8px 0}.url{color:#627269;word-break:break-all}.score{font-size:56px;font-weight:850;color:${scoreColor}}.context{background:#fff;border:1px solid #e3e9e6;border-radius:12px;padding:13px 16px;margin-bottom:24px;color:#526158}table{width:100%;border-collapse:collapse;background:white;border-radius:14px;overflow:hidden;box-shadow:0 10px 35px #16221c12}th,td{text-align:left;padding:13px;border-bottom:1px solid #e3e9e6;vertical-align:top}th{background:#e9f0ec;font-size:11px;text-transform:uppercase;letter-spacing:.08em}small{color:#74837b}.dot{display:inline-block;border-radius:999px;padding:3px 7px;font-size:10px;font-weight:800}.yes{background:#d8f6e4;color:#126a3a}.no{background:#ffe0de;color:#a12f2a}.review{background:#e1e7ff;color:#31478d}.note{margin-top:20px;color:#718078;font-size:12px}@media(max-width:700px){header{display:block}.score{margin-top:18px}th:nth-child(3),td:nth-child(3){display:none}}</style></head><body><div class="wrap"><header><div><small>SHOPIFY CRO AUDIT · ${new Date(snapshot.scannedAt).toLocaleString()} · ${profileLabel.toUpperCase()} · ${innerWidth}×${innerHeight}</small><h1>${esc(text(h1) || document.title)}</h1><div class="url">${esc(snapshot.url)}</div></div><div><div class="score">${score}/100</div><b>${grade}</b></div></header><div class="context">${categorySummary} · Selected variant: ${esc(snapshot.selectedVariantId || 'not exposed')}</div><table><thead><tr><th>Status</th><th>Check</th><th>Evidence</th><th>Recommendation / rationale</th></tr></thead><tbody>${rows}</tbody></table><p class="note">Framework v6 · ${applicable.length} checks assessed · ${unmeasured.length} comparisons unavailable. Likely findings count at 75% weight; unavailable comparisons do not reduce the score. Subjective quality, recommendation relevance, destination accuracy and real performance remain manual reviews.</p></div></body></html>`;
         const blob = new Blob([report], {type:'text/html'});
